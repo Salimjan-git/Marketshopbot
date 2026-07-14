@@ -26,6 +26,7 @@ from database import (
     get_user_orders,
     remove_from_cart,
     update_cart_quantity,
+    update_order_status
 )
 from keyboards.menu import (
     brands_keyboard,
@@ -782,6 +783,79 @@ async def handle_callback(
     if data == "my_orders":
         await show_orders_callback(query, user_id)
         return
+    if data.startswith("cancel_order_"):
+        try:
+            order_id = int(
+                data.removeprefix("cancel_order_")
+            )
+        except ValueError:
+            await query.answer(
+                "ID-и заказ нодуруст аст.",
+                show_alert=True,
+            )
+            return
+
+        if not user_id:
+            await query.answer(
+                "Корбар ёфт нашуд.",
+                show_alert=True,
+            )
+            return
+
+        order = get_order_details(order_id)
+
+        if not order:
+            await query.answer(
+                "Заказ ёфт нашуд.",
+                show_alert=True,
+            )
+            return
+
+        # Корбар танҳо закази худашро бекор карда метавонад
+        if order["user_id"] != user_id:
+            await query.answer(
+                "Шумо ин заказро бекор карда наметавонед.",
+                show_alert=True,
+            )
+            return
+
+        if order["status"] == "cancelled":
+            await query.answer(
+                "Ин заказ аллакай бекор шудааст.",
+                show_alert=True,
+            )
+            return
+
+        if order["status"] == "delivered":
+            await query.answer(
+                "Закази расонидашударо бекор кардан мумкин нест.",
+                show_alert=True,
+            )
+            return
+
+        success = update_order_status(
+            order_id=order_id,
+            status="cancelled",
+        )
+
+        if not success:
+            await query.answer(
+                "Заказ бекор карда нашуд.",
+                show_alert=True,
+            )
+            return
+
+        await query.edit_message_text(
+            text=(
+                f"❌ Закази №{order_id} бекор карда шуд.\n\n"
+                "Статус: cancelled"
+            ),
+            reply_markup=order_detail_keyboard(
+                order_id=order_id,
+                status=order["status"],
+            ),
+        )
+
 
     if data.startswith("order_status_"):
         try:
@@ -819,6 +893,7 @@ async def handle_callback(
             order_detail_keyboard(order_id),
         )
         return
+    return
 
 
 # =========================================================
@@ -912,10 +987,3 @@ def register_handlers(app: Application) -> None:
         )
     )
 
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            handle_order_data,
-        ),
-        group=1,
-    )

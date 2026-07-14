@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import sqlite3
 
 from telegram import Update
@@ -42,6 +40,7 @@ from keyboards.admin import (
 )
 from keyboards.menu import main_menu_keyboard
 
+
 (
     ADD_CATEGORY_NAME,
     ADD_BRAND_NAME,
@@ -51,21 +50,15 @@ from keyboards.menu import main_menu_keyboard
     PRODUCT_BRAND,
     PRODUCT_MODEL,
     PRODUCT_TITLE,
+    PRODUCT_DESCRIPTION,
     PRODUCT_CONDITION,
     PRODUCT_RAM,
     PRODUCT_STORAGE,
     PRODUCT_COLOR,
     PRODUCT_PRICE,
-    PRODUCT_DISCOUNT,
-    PRODUCT_STOCK,
-    PRODUCT_CITY,
-    PRODUCT_WARRANTY,
-    PRODUCT_BATTERY,
-    PRODUCT_SIM,
-    PRODUCT_DESCRIPTION,
     PRODUCT_IMAGES,
     PRODUCT_CONFIRM,
-) = range(22)
+) = range(16)
 
 
 def is_admin(telegram_id: int) -> bool:
@@ -75,7 +68,8 @@ def is_admin(telegram_id: int) -> bool:
 async def deny_access(update: Update) -> None:
     if update.callback_query:
         await update.callback_query.answer(
-            "Шумо администратор нестед.", show_alert=True
+            "❌ Шумо администратор нестед.",
+            show_alert=True,
         )
     elif update.message:
         await update.message.reply_text(
@@ -83,42 +77,12 @@ async def deny_access(update: Update) -> None:
         )
 
 
-def get_new_product(context: ContextTypes.DEFAULT_TYPE) -> dict:
-    return context.user_data.setdefault("new_product", {})
-
-
-async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data.pop("new_product", None)
-    context.user_data.pop("new_model", None)
-
-    if update.callback_query:
-        query = update.callback_query
-        await query.answer()
-        try:
-            if query.message and query.message.photo:
-                await query.edit_message_caption(caption="❌ Амалиёт бекор карда шуд.")
-            else:
-                await query.edit_message_text("❌ Амалиёт бекор карда шуд.")
-        except Exception:
-            pass
-        if query.message:
-            await query.message.reply_text(
-                "👨‍💼 Панели администратор",
-                reply_markup=admin_menu_keyboard(),
-            )
-    elif update.message:
-        await update.message.reply_text(
-            "❌ Амалиёт бекор карда шуд.",
-            reply_markup=admin_menu_keyboard(),
-        )
-    return ConversationHandler.END
-
-
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if not user or not is_admin(user.id):
         await deny_access(update)
         return
+
     await update.message.reply_text(
         "👨‍💼 Панели администратор",
         reply_markup=admin_menu_keyboard(),
@@ -132,13 +96,49 @@ async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data.pop("new_product", None)
+    context.user_data.pop("new_model", None)
+
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        try:
+            if query.message.photo:
+                await query.edit_message_caption(
+                    caption="❌ Амалиёт бекор карда шуд."
+                )
+            else:
+                await query.edit_message_text(
+                    "❌ Амалиёт бекор карда шуд."
+                )
+        except Exception:
+            pass
+        await query.message.reply_text(
+            "👨‍💼 Панели администратор",
+            reply_markup=admin_menu_keyboard(),
+        )
+    elif update.message:
+        await update.message.reply_text(
+            "❌ Амалиёт бекор карда шуд.",
+            reply_markup=admin_menu_keyboard(),
+        )
+
+    return ConversationHandler.END
+
+
+# ===================== CATEGORY =====================
+
 async def add_category_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user
     if not user or not is_admin(user.id):
         await deny_access(update)
         return ConversationHandler.END
+
     await update.message.reply_text(
-        "📂 Номи категорияро нависед.\n\nМисол: 📱 Смартфоны\n\nБекор кардан: /cancel"
+        "📂 Номи категорияро нависед.\n"
+        "Мисол: 📱 Смартфоны\n\n"
+        "Бекор кардан: /cancel"
     )
     return ADD_CATEGORY_NAME
 
@@ -148,6 +148,7 @@ async def add_category_name(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if len(name) < 2:
         await update.message.reply_text("❌ Ном хеле кӯтоҳ аст.")
         return ADD_CATEGORY_NAME
+
     try:
         category_id = add_category(name=name)
     except sqlite3.IntegrityError:
@@ -156,6 +157,7 @@ async def add_category_name(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             reply_markup=admin_menu_keyboard(),
         )
         return ConversationHandler.END
+
     await update.message.reply_text(
         f"✅ Категория илова шуд.\nID: {category_id}\nНом: {name}",
         reply_markup=admin_menu_keyboard(),
@@ -163,13 +165,18 @@ async def add_category_name(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ConversationHandler.END
 
 
+# ===================== BRAND =====================
+
 async def add_brand_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user
     if not user or not is_admin(user.id):
         await deny_access(update)
         return ConversationHandler.END
+
     await update.message.reply_text(
-        "🏷 Номи брендро нависед.\n\nМисол: Samsung\n\nБекор кардан: /cancel"
+        "🏷 Номи брендро нависед.\n"
+        "Мисол: Samsung\n\n"
+        "Бекор кардан: /cancel"
     )
     return ADD_BRAND_NAME
 
@@ -179,6 +186,7 @@ async def add_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if len(name) < 2:
         await update.message.reply_text("❌ Ном хеле кӯтоҳ аст.")
         return ADD_BRAND_NAME
+
     try:
         brand_id = add_brand(name=name)
     except sqlite3.IntegrityError:
@@ -187,6 +195,7 @@ async def add_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup=admin_menu_keyboard(),
         )
         return ConversationHandler.END
+
     await update.message.reply_text(
         f"✅ Бренд илова шуд.\nID: {brand_id}\nНом: {name}",
         reply_markup=admin_menu_keyboard(),
@@ -194,11 +203,14 @@ async def add_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return ConversationHandler.END
 
 
+# ===================== MODEL =====================
+
 async def add_model_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user
     if not user or not is_admin(user.id):
         await deny_access(update)
         return ConversationHandler.END
+
     brands = get_brands()
     if not brands:
         await update.message.reply_text(
@@ -206,44 +218,59 @@ async def add_model_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             reply_markup=admin_menu_keyboard(),
         )
         return ConversationHandler.END
+
     context.user_data["new_model"] = {}
+
     await update.message.reply_text(
-        "🏷 Барои модели нав брендро интихоб кунед:",
-        reply_markup=admin_brands_keyboard(brands, prefix="admin_model_brand"),
+        "🏷 Брендро интихоб кунед:",
+        reply_markup=admin_brands_keyboard(
+            brands,
+            prefix="admin_model_brand",
+        ),
     )
     return ADD_MODEL_BRAND
 
 
-async def add_model_brand_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def add_model_brand_selected(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     query = update.callback_query
     await query.answer()
+
     try:
         brand_id = int(query.data.removeprefix("admin_model_brand_"))
     except ValueError:
-        await query.edit_message_text("❌ ID-и бренд нодуруст аст.")
         return ConversationHandler.END
+
     context.user_data["new_model"] = {"brand_id": brand_id}
-    await query.edit_message_text("📱 Номи моделро нависед.\n\nМисол: Galaxy S24 Ultra")
+    await query.edit_message_text(
+        "📱 Номи моделро нависед.\n"
+        "Мисол: Galaxy S24 Ultra"
+    )
     return ADD_MODEL_NAME
 
 
 async def add_model_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     name = update.message.text.strip()
     model_data = context.user_data.get("new_model", {})
+
     if len(name) < 2:
         await update.message.reply_text("❌ Номи модел хеле кӯтоҳ аст.")
         return ADD_MODEL_NAME
-    if "brand_id" not in model_data:
-        await update.message.reply_text("❌ Бренд интихоб нашудааст.")
-        return ConversationHandler.END
+
     try:
-        model_id = add_model(model_data["brand_id"], name)
-    except sqlite3.IntegrityError:
+        model_id = add_model(
+            brand_id=model_data["brand_id"],
+            name=name,
+        )
+    except (KeyError, sqlite3.IntegrityError):
         await update.message.reply_text(
-            "❌ Ин модел барои ҳамин бренд аллакай вуҷуд дорад.",
+            "❌ Модел илова нашуд ё аллакай вуҷуд дорад.",
             reply_markup=admin_menu_keyboard(),
         )
         return ConversationHandler.END
+
     context.user_data.pop("new_model", None)
     await update.message.reply_text(
         f"✅ Модел илова шуд.\nID: {model_id}\nНом: {name}",
@@ -252,11 +279,18 @@ async def add_model_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return ConversationHandler.END
 
 
+# ===================== PRODUCT =====================
+
+def new_product(context: ContextTypes.DEFAULT_TYPE) -> dict:
+    return context.user_data.setdefault("new_product", {"images": []})
+
+
 async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user
     if not user or not is_admin(user.id):
         await deny_access(update)
         return ConversationHandler.END
+
     categories = get_categories()
     if not categories:
         await update.message.reply_text(
@@ -264,6 +298,7 @@ async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             reply_markup=admin_menu_keyboard(),
         )
         return ConversationHandler.END
+
     context.user_data["new_product"] = {"images": []}
     await update.message.reply_text(
         "📂 Категорияро интихоб кунед:",
@@ -272,42 +307,49 @@ async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return PRODUCT_CATEGORY
 
 
-async def product_category_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def product_category_selected(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     query = update.callback_query
     await query.answer()
-    try:
-        category_id = int(query.data.removeprefix("admin_category_"))
-    except ValueError:
-        await query.edit_message_text("❌ ID-и категория нодуруст аст.")
-        return ConversationHandler.END
-    get_new_product(context)["category_id"] = category_id
+
+    category_id = int(query.data.removeprefix("admin_category_"))
+    new_product(context)["category_id"] = category_id
+
     brands = get_brands()
     if not brands:
         await query.edit_message_text("❌ Аввал бренд илова кунед.")
         return ConversationHandler.END
+
     await query.edit_message_text(
         "🏷 Брендро интихоб кунед:",
-        reply_markup=admin_brands_keyboard(brands, prefix="admin_product_brand"),
+        reply_markup=admin_brands_keyboard(
+            brands,
+            prefix="admin_product_brand",
+        ),
     )
     return PRODUCT_BRAND
 
 
-async def product_brand_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def product_brand_selected(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     query = update.callback_query
     await query.answer()
-    try:
-        brand_id = int(query.data.removeprefix("admin_product_brand_"))
-    except ValueError:
-        await query.edit_message_text("❌ ID-и бренд нодуруст аст.")
-        return ConversationHandler.END
-    get_new_product(context)["brand_id"] = brand_id
+
+    brand_id = int(query.data.removeprefix("admin_product_brand_"))
+    new_product(context)["brand_id"] = brand_id
+
     models = get_models_by_brand(brand_id)
     if not models:
         await query.edit_message_text(
-            "❌ Барои ин бренд ягон модел нест.\n"
+            "❌ Барои ин бренд модел нест.\n"
             "Аввал «📱 Добавить модель»-ро истифода баред."
         )
         return ConversationHandler.END
+
     await query.edit_message_text(
         "📱 Моделро интихоб кунед:",
         reply_markup=admin_models_keyboard(models),
@@ -315,17 +357,19 @@ async def product_brand_selected(update: Update, context: ContextTypes.DEFAULT_T
     return PRODUCT_MODEL
 
 
-async def product_model_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def product_model_selected(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     query = update.callback_query
     await query.answer()
-    try:
-        model_id = int(query.data.removeprefix("admin_product_model_"))
-    except ValueError:
-        await query.edit_message_text("❌ ID-и модел нодуруст аст.")
-        return ConversationHandler.END
-    get_new_product(context)["model_id"] = model_id
+
+    model_id = int(query.data.removeprefix("admin_product_model_"))
+    new_product(context)["model_id"] = model_id
+
     await query.edit_message_text(
-        "📝 Номи эълонро нависед.\n\nМисол: Samsung Galaxy S24 Ultra 12/256GB"
+        "📝 Номи эълонро нависед.\n"
+        "Мисол: Samsung Galaxy S24 Ultra 12/256GB"
     )
     return PRODUCT_TITLE
 
@@ -335,7 +379,22 @@ async def product_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE
     if len(title) < 3:
         await update.message.reply_text("❌ Ном хеле кӯтоҳ аст.")
         return PRODUCT_TITLE
-    get_new_product(context)["title"] = title
+
+    new_product(context)["title"] = title
+    await update.message.reply_text("📄 Тавсифи маҳсулотро нависед.")
+    return PRODUCT_DESCRIPTION
+
+
+async def product_description_input(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    description = update.message.text.strip()
+    if len(description) < 3:
+        await update.message.reply_text("❌ Тавсиф хеле кӯтоҳ аст.")
+        return PRODUCT_DESCRIPTION
+
+    new_product(context)["description"] = description
     await update.message.reply_text(
         "📦 Ҳолати маҳсулотро интихоб кунед:",
         reply_markup=condition_keyboard(),
@@ -343,36 +402,64 @@ async def product_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE
     return PRODUCT_CONDITION
 
 
-async def product_condition_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def product_condition_selected(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     query = update.callback_query
     await query.answer()
-    value = query.data.removeprefix("admin_condition_")
-    if value not in {"new", "used"}:
-        await query.edit_message_text("❌ Ҳолат нодуруст аст.")
+
+    condition = query.data.removeprefix("admin_condition_")
+    if condition not in {"new", "used"}:
         return PRODUCT_CONDITION
-    get_new_product(context)["condition"] = value
-    await query.edit_message_text("🧠 RAM-ро нависед. Мисол: 8 GB. Агар лозим набошад: -")
+
+    new_product(context)["condition"] = condition
+    await query.edit_message_text(
+        "🧠 RAM-ро нависед.\n"
+        "Мисол: 8 GB\n"
+        "Агар лозим набошад: -"
+    )
     return PRODUCT_RAM
 
 
 async def product_ram_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     value = update.message.text.strip()
-    get_new_product(context)["ram"] = None if value == "-" else value
-    await update.message.reply_text("💾 Хотираро нависед. Мисол: 128 GB. Агар лозим набошад: -")
+    new_product(context)["ram"] = None if value == "-" else value
+    await update.message.reply_text(
+        "💾 Хотираро нависед.\n"
+        "Мисол: 128 GB, 256 GB ё 1 TB"
+    )
     return PRODUCT_STORAGE
 
 
-async def product_storage_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def product_storage_input(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     value = update.message.text.strip()
-    get_new_product(context)["storage"] = None if value == "-" else value
-    await update.message.reply_text("🎨 Рангро нависед. Мисол: Black Titanium. Агар лозим набошад: -")
+    if not value:
+        await update.message.reply_text("❌ Хотираро нависед.")
+        return PRODUCT_STORAGE
+
+    new_product(context)["storage"] = value
+    await update.message.reply_text(
+        "🎨 Рангро нависед.\n"
+        "Мисол: Black Titanium"
+    )
     return PRODUCT_COLOR
 
 
 async def product_color_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     value = update.message.text.strip()
-    get_new_product(context)["color"] = None if value == "-" else value
-    await update.message.reply_text("💰 Нархро бо сомонӣ нависед. Мисол: 9500")
+    if not value:
+        await update.message.reply_text("❌ Рангро нависед.")
+        return PRODUCT_COLOR
+
+    new_product(context)["color"] = value
+    await update.message.reply_text(
+        "💰 Нархро бо сомонӣ нависед.\n"
+        "Мисол: 9500"
+    )
     return PRODUCT_PRICE
 
 
@@ -382,74 +469,14 @@ async def product_price_input(update: Update, context: ContextTypes.DEFAULT_TYPE
     except ValueError:
         await update.message.reply_text("❌ Нарх бояд рақам бошад.")
         return PRODUCT_PRICE
-    if price < 0:
-        await update.message.reply_text("❌ Нарх манфӣ шуда наметавонад.")
+
+    if price <= 0:
+        await update.message.reply_text("❌ Нарх бояд аз 0 зиёд бошад.")
         return PRODUCT_PRICE
-    get_new_product(context)["price"] = price
-    await update.message.reply_text("📉 Тахфифро нависед. Агар набошад: 0")
-    return PRODUCT_DISCOUNT
 
-
-async def product_discount_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        discount = float(update.message.text.strip().replace(",", "."))
-    except ValueError:
-        await update.message.reply_text("❌ Тахфиф бояд рақам бошад.")
-        return PRODUCT_DISCOUNT
-    product = get_new_product(context)
-    if discount < 0 or discount > product["price"]:
-        await update.message.reply_text("❌ Тахфиф нодуруст аст.")
-        return PRODUCT_DISCOUNT
-    product["discount"] = discount
-    await update.message.reply_text("📦 Миқдорро дар анбор нависед. Мисол: 10")
-    return PRODUCT_STOCK
-
-
-async def product_stock_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        stock = int(update.message.text.strip())
-    except ValueError:
-        await update.message.reply_text("❌ Миқдор бояд адади бутун бошад.")
-        return PRODUCT_STOCK
-    if stock < 0:
-        await update.message.reply_text("❌ Миқдор манфӣ шуда наметавонад.")
-        return PRODUCT_STOCK
-    get_new_product(context)["stock"] = stock
-    await update.message.reply_text("📍 Шаҳрро нависед. Мисол: Душанбе")
-    return PRODUCT_CITY
-
-
-async def product_city_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    get_new_product(context)["city"] = update.message.text.strip()
-    await update.message.reply_text("🛡 Кафолатро нависед. Мисол: 12 моҳ. Агар набошад: -")
-    return PRODUCT_WARRANTY
-
-
-async def product_warranty_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    value = update.message.text.strip()
-    get_new_product(context)["warranty"] = None if value == "-" else value
-    await update.message.reply_text("🔋 Battery health-ро нависед. Мисол: 100%. Агар лозим набошад: -")
-    return PRODUCT_BATTERY
-
-
-async def product_battery_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    value = update.message.text.strip()
-    get_new_product(context)["battery_health"] = None if value == "-" else value
-    await update.message.reply_text("📶 Навъи SIM-ро нависед. Мисол: Nano SIM + eSIM. Агар лозим набошад: -")
-    return PRODUCT_SIM
-
-
-async def product_sim_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    value = update.message.text.strip()
-    get_new_product(context)["sim_type"] = None if value == "-" else value
-    await update.message.reply_text("📄 Тавсифи маҳсулотро нависед.")
-    return PRODUCT_DESCRIPTION
-
-
-async def product_description_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    get_new_product(context)["description"] = update.message.text.strip()
+    new_product(context)["price"] = price
     await update.message.reply_text(
-        "🖼 Аз 1 то 4 сурат фиристед. Суратҳоро як-як фиристед.\n"
+        "🖼 Аз 1 то 4 сурат фиристед.\n"
         "Баъди анҷом «✅ Суратҳо тамом»-ро пахш кунед.",
         reply_markup=finish_images_keyboard(),
     )
@@ -457,13 +484,16 @@ async def product_description_input(update: Update, context: ContextTypes.DEFAUL
 
 
 async def product_image_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if not update.message or not update.message.photo:
-        await update.message.reply_text("❌ Суратро ҳамчун Photo фиристед.")
-        return PRODUCT_IMAGES
-    images = get_new_product(context).setdefault("images", [])
+    product = new_product(context)
+    images = product.setdefault("images", [])
+
     if len(images) >= 4:
-        await update.message.reply_text("⚠️ Аллакай 4 сурат қабул шуд.")
+        await update.message.reply_text(
+            "⚠️ Аллакай 4 сурат қабул шуд.",
+            reply_markup=finish_images_keyboard(),
+        )
         return PRODUCT_IMAGES
+
     images.append(update.message.photo[-1].file_id)
     await update.message.reply_text(
         f"✅ Сурати {len(images)} қабул шуд.",
@@ -472,35 +502,35 @@ async def product_image_input(update: Update, context: ContextTypes.DEFAULT_TYPE
     return PRODUCT_IMAGES
 
 
-async def product_images_finished(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def product_images_finished(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     query = update.callback_query
     await query.answer()
-    product = get_new_product(context)
+
+    product = new_product(context)
     images = product.get("images", [])
+
     if not images:
         await query.answer("Ҳадди ақал 1 сурат фиристед.", show_alert=True)
         return PRODUCT_IMAGES
+
     condition_text = "Нав" if product["condition"] == "new" else "Б/у"
-    final_price = product["price"] - product["discount"]
+
     caption = (
-        "📋 Маълумоти эълони нав:\n\n"
+        "📋 Маълумоти маҳсулоти нав:\n\n"
         f"📝 Ном: {product['title']}\n"
         f"📦 Ҳолат: {condition_text}\n"
         f"🧠 RAM: {product.get('ram') or '—'}\n"
-        f"💾 Хотира: {product.get('storage') or '—'}\n"
-        f"🎨 Ранг: {product.get('color') or '—'}\n"
+        f"💾 Хотира: {product['storage']}\n"
+        f"🎨 Ранг: {product['color']}\n"
         f"💰 Нарх: {product['price']:.2f} сомонӣ\n"
-        f"📉 Тахфиф: {product['discount']:.2f} сомонӣ\n"
-        f"💳 Нархи ниҳоӣ: {final_price:.2f} сомонӣ\n"
-        f"📦 Миқдор: {product['stock']}\n"
-        f"📍 Шаҳр: {product['city']}\n"
-        f"🛡 Кафолат: {product.get('warranty') or '—'}\n"
-        f"🔋 Battery: {product.get('battery_health') or '—'}\n"
-        f"📶 SIM: {product.get('sim_type') or '—'}\n"
         f"🖼 Суратҳо: {len(images)}\n\n"
         f"📄 Тавсиф:\n{product['description']}\n\n"
         "Маҳсулотро нигоҳ дорем?"
     )
+
     await query.message.reply_photo(
         photo=images[0],
         caption=caption,
@@ -512,42 +542,56 @@ async def product_images_finished(update: Update, context: ContextTypes.DEFAULT_
 async def product_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    user = update.effective_user
-    if not user or not is_admin(user.id):
-        await deny_access(update)
-        return ConversationHandler.END
+
     product = context.user_data.get("new_product")
     if not product:
-        await query.edit_message_caption(caption="❌ Маълумоти маҳсулот ёфт нашуд.")
+        await query.edit_message_caption(
+            caption="❌ Маълумоти маҳсулот ёфт нашуд."
+        )
         return ConversationHandler.END
+
     try:
         product_id = add_product(
             category_id=product["category_id"],
             brand_id=product["brand_id"],
             model_id=product["model_id"],
             title=product["title"],
-            description=product.get("description"),
+            description=product["description"],
             condition=product["condition"],
             ram=product.get("ram"),
-            storage=product.get("storage"),
-            color=product.get("color"),
+            storage=product["storage"],
+            color=product["color"],
             price=product["price"],
-            discount=product["discount"],
-            stock=product["stock"],
-            city=product.get("city"),
-            warranty=product.get("warranty"),
-            battery_health=product.get("battery_health"),
-            sim_type=product.get("sim_type"),
+            discount=0,
+            stock=1,
+            city=None,
+            warranty=None,
+            battery_health=None,
+            sim_type=None,
         )
-        for position, file_id in enumerate(product.get("images", []), start=1):
-            add_product_image(product_id, file_id, position)
+
+        for position, file_id in enumerate(product["images"], start=1):
+            add_product_image(
+                product_id=product_id,
+                telegram_file_id=file_id,
+                position=position,
+            )
+
     except Exception as error:
-        await query.edit_message_caption(caption=f"❌ Маҳсулот сабт нашуд:\n{error}")
+        await query.edit_message_caption(
+            caption=f"❌ Маҳсулот сабт нашуд:\n{error}"
+        )
         return ConversationHandler.END
+
     title = product["title"]
     context.user_data.pop("new_product", None)
+
     await query.edit_message_caption(
-        caption=f"✅ Маҳсулот илова шуд!\n\nID: {product_id}\nНом: {title}"
+        caption=(
+            "✅ Маҳсулот бо муваффақият илова шуд!\n"
+            f"ID: {product_id}\n"
+            f"Ном: {title}"
+        )
     )
     await query.message.reply_text(
         "👨‍💼 Панели администратор",
@@ -556,29 +600,16 @@ async def product_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return ConversationHandler.END
 
 
+# ===================== ORDERS / STATS =====================
+
 async def show_all_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    if not user or not is_admin(user.id):
-        await deny_access(update)
-        return
     orders = get_all_orders()
+
     if not orders:
         await update.message.reply_text("📦 Ҳоло ягон фармоиш нест.")
         return
+
     await update.message.reply_text(
-        "📦 Ҳамаи фармоишҳо:",
-        reply_markup=orders_admin_keyboard(orders),
-    )
-
-
-async def admin_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    orders = get_all_orders()
-    if not orders:
-        await query.edit_message_text("📦 Ҳоло ягон фармоиш нест.")
-        return
-    await query.edit_message_text(
         "📦 Ҳамаи фармоишҳо:",
         reply_markup=orders_admin_keyboard(orders),
     )
@@ -587,71 +618,60 @@ async def admin_orders_callback(update: Update, context: ContextTypes.DEFAULT_TY
 async def show_admin_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    try:
-        order_id = int(query.data.removeprefix("admin_order_"))
-    except ValueError:
-        return
+
+    order_id = int(query.data.removeprefix("admin_order_"))
     order = get_order_details(order_id)
+
     if not order:
         await query.edit_message_text("❌ Фармоиш ёфт нашуд.")
         return
-    lines = [
-        f"📦 Фармоиш #{order['id']}",
-        f"👤 Мизоҷ: {order.get('full_name') or 'Номаълум'}",
-        f"🆔 Telegram ID: {order.get('telegram_id')}",
-        f"📞 Телефон: {order['phone']}",
-        f"🏠 Адрес: {order['address']}",
-        f"💰 Маблағ: {float(order['total_price']):.2f} сомонӣ",
-        f"📋 Статус: {order['status']}",
-        f"📅 Сана: {order['created_at']}",
-        "",
-        "🛍 Маҳсулот:",
-    ]
-    for item in order["items"]:
-        total = float(item["price"]) * item["quantity"]
-        lines.append(f"• {item['product_name']} × {item['quantity']} = {total:.2f} сомонӣ")
+
+    text = (
+        f"📦 Фармоиш #{order['id']}\n"
+        f"👤 {order.get('full_name') or 'Номаълум'}\n"
+        f"📞 {order['phone']}\n"
+        f"🏠 {order['address']}\n"
+        f"💰 {float(order['total_price']):.2f} сомонӣ\n"
+        f"📋 {order['status']}"
+    )
+
     await query.edit_message_text(
-        "\n".join(lines),
+        text,
         reply_markup=order_status_keyboard(order_id),
     )
 
 
-async def change_order_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def change_order_status(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
     query = update.callback_query
     await query.answer()
-    parts = query.data.split("_")
-    if len(parts) != 4:
-        return
-    status = parts[2]
-    try:
-        order_id = int(parts[3])
-    except ValueError:
-        return
-    if not update_order_status(order_id, status):
-        await query.answer("❌ Статус иваз нашуд.", show_alert=True)
-        return
+
+    _, _, status, order_id_text = query.data.split("_")
+    order_id = int(order_id_text)
+
+    update_order_status(order_id, status)
+
     await query.edit_message_text(
-        f"✅ Статуси фармоиши #{order_id} иваз шуд.\nСтатуси нав: {status}",
+        f"✅ Статуси фармоиши #{order_id}: {status}",
         reply_markup=order_status_keyboard(order_id),
     )
 
 
 async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    if not user or not is_admin(user.id):
-        await deny_access(update)
-        return
     users = get_all_users()
     products = get_products()
     orders = get_all_orders()
     categories = get_categories()
     brands = get_brands()
+
     total_income = sum(
         float(order["total_price"])
         for order in orders
         if order["status"] != "cancelled"
     )
-    delivered_orders = sum(1 for order in orders if order["status"] == "delivered")
+
     await update.message.reply_text(
         "📊 Статистика\n\n"
         f"👥 Корбарон: {len(users)}\n"
@@ -659,86 +679,212 @@ async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         f"🏷 Брендҳо: {len(brands)}\n"
         f"🛍 Маҳсулот: {len(products)}\n"
         f"📦 Фармоишҳо: {len(orders)}\n"
-        f"✅ Расонидашуда: {delivered_orders}\n"
-        f"💰 Даромади умумӣ: {total_income:.2f} сомонӣ"
+        f"💰 Даромад: {total_income:.2f} сомонӣ"
     )
 
 
 def register_handlers(app: Application) -> None:
-    category_conversation = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex(r"^📂 Добавить категорию$"), add_category_start)],
-        states={ADD_CATEGORY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_category_name)]},
-        fallbacks=[CommandHandler("cancel", cancel_conversation)],
-        allow_reentry=True,
-    )
-    brand_conversation = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex(r"^🏷 Добавить бренд$"), add_brand_start)],
-        states={ADD_BRAND_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_brand_name)]},
-        fallbacks=[CommandHandler("cancel", cancel_conversation)],
-        allow_reentry=True,
-    )
-    model_conversation = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex(r"^📱 Добавить модель$"), add_model_start)],
+    category_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(
+                filters.Regex(r"^📂 Добавить категорию$"),
+                add_category_start,
+            )
+        ],
         states={
-            ADD_MODEL_BRAND: [CallbackQueryHandler(add_model_brand_selected, pattern=r"^admin_model_brand_\d+$")],
-            ADD_MODEL_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_model_name)],
+            ADD_CATEGORY_NAME: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    add_category_name,
+                )
+            ]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True,
+    )
+
+    brand_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(
+                filters.Regex(r"^🏷 Добавить бренд$"),
+                add_brand_start,
+            )
+        ],
+        states={
+            ADD_BRAND_NAME: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    add_brand_name,
+                )
+            ]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True,
+    )
+
+    model_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(
+                filters.Regex(r"^📱 Добавить модель$"),
+                add_model_start,
+            )
+        ],
+        states={
+            ADD_MODEL_BRAND: [
+                CallbackQueryHandler(
+                    add_model_brand_selected,
+                    pattern=r"^admin_model_brand_\d+$",
+                )
+            ],
+            ADD_MODEL_NAME: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    add_model_name,
+                )
+            ],
         },
         fallbacks=[
-            CommandHandler("cancel", cancel_conversation),
-            CallbackQueryHandler(cancel_conversation, pattern=r"^admin_cancel$"),
+            CommandHandler("cancel", cancel),
+            CallbackQueryHandler(cancel, pattern=r"^admin_cancel$"),
         ],
         allow_reentry=True,
     )
-    product_conversation = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex(r"^➕ Добавить товар$"), add_product_start)],
+
+    product_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(
+                filters.Regex(r"^➕ Добавить товар$"),
+                add_product_start,
+            )
+        ],
         states={
-            PRODUCT_CATEGORY: [CallbackQueryHandler(product_category_selected, pattern=r"^admin_category_\d+$")],
-            PRODUCT_BRAND: [CallbackQueryHandler(product_brand_selected, pattern=r"^admin_product_brand_\d+$")],
-            PRODUCT_MODEL: [CallbackQueryHandler(product_model_selected, pattern=r"^admin_product_model_\d+$")],
-            PRODUCT_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_title_input)],
-            PRODUCT_CONDITION: [CallbackQueryHandler(product_condition_selected, pattern=r"^admin_condition_(new|used)$")],
-            PRODUCT_RAM: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_ram_input)],
-            PRODUCT_STORAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_storage_input)],
-            PRODUCT_COLOR: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_color_input)],
-            PRODUCT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_price_input)],
-            PRODUCT_DISCOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_discount_input)],
-            PRODUCT_STOCK: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_stock_input)],
-            PRODUCT_CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_city_input)],
-            PRODUCT_WARRANTY: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_warranty_input)],
-            PRODUCT_BATTERY: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_battery_input)],
-            PRODUCT_SIM: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_sim_input)],
-            PRODUCT_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_description_input)],
+            PRODUCT_CATEGORY: [
+                CallbackQueryHandler(
+                    product_category_selected,
+                    pattern=r"^admin_category_\d+$",
+                )
+            ],
+            PRODUCT_BRAND: [
+                CallbackQueryHandler(
+                    product_brand_selected,
+                    pattern=r"^admin_product_brand_\d+$",
+                )
+            ],
+            PRODUCT_MODEL: [
+                CallbackQueryHandler(
+                    product_model_selected,
+                    pattern=r"^admin_product_model_\d+$",
+                )
+            ],
+            PRODUCT_TITLE: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    product_title_input,
+                )
+            ],
+            PRODUCT_DESCRIPTION: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    product_description_input,
+                )
+            ],
+            PRODUCT_CONDITION: [
+                CallbackQueryHandler(
+                    product_condition_selected,
+                    pattern=r"^admin_condition_(new|used)$",
+                )
+            ],
+            PRODUCT_RAM: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    product_ram_input,
+                )
+            ],
+            PRODUCT_STORAGE: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    product_storage_input,
+                )
+            ],
+            PRODUCT_COLOR: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    product_color_input,
+                )
+            ],
+            PRODUCT_PRICE: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    product_price_input,
+                )
+            ],
             PRODUCT_IMAGES: [
                 MessageHandler(filters.PHOTO, product_image_input),
-                CallbackQueryHandler(product_images_finished, pattern=r"^admin_images_finished$"),
+                CallbackQueryHandler(
+                    product_images_finished,
+                    pattern=r"^admin_images_finished$",
+                ),
             ],
             PRODUCT_CONFIRM: [
-                CallbackQueryHandler(product_save, pattern=r"^admin_product_save$"),
-                CallbackQueryHandler(cancel_conversation, pattern=r"^admin_cancel$"),
+                CallbackQueryHandler(
+                    product_save,
+                    pattern=r"^admin_product_save$",
+                ),
+                CallbackQueryHandler(
+                    cancel,
+                    pattern=r"^admin_cancel$",
+                ),
             ],
         },
         fallbacks=[
-            CommandHandler("cancel", cancel_conversation),
-            CallbackQueryHandler(cancel_conversation, pattern=r"^admin_cancel$"),
+            CommandHandler("cancel", cancel),
+            CallbackQueryHandler(cancel, pattern=r"^admin_cancel$"),
         ],
         allow_reentry=True,
         per_message=False,
     )
 
     app.add_handler(CommandHandler("admin", admin_command), group=-1)
-    app.add_handler(product_conversation, group=-1)
-    app.add_handler(model_conversation, group=-1)
-    app.add_handler(category_conversation, group=-1)
-    app.add_handler(brand_conversation, group=-1)
-    app.add_handler(MessageHandler(filters.Regex(r"^📦 Все заказы$"), show_all_orders), group=-1)
-    app.add_handler(MessageHandler(filters.Regex(r"^📊 Статистика$"), show_statistics), group=-1)
-    app.add_handler(MessageHandler(filters.Regex(r"^🔙 Главное меню$"), back_to_main), group=-1)
-    app.add_handler(CallbackQueryHandler(admin_orders_callback, pattern=r"^admin_orders$"), group=-1)
-    app.add_handler(CallbackQueryHandler(show_admin_order, pattern=r"^admin_order_\d+$"), group=-1)
+    app.add_handler(product_conv, group=-1)
+    app.add_handler(model_conv, group=-1)
+    app.add_handler(category_conv, group=-1)
+    app.add_handler(brand_conv, group=-1)
+
+    app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^📦 Все заказы$"),
+            show_all_orders,
+        ),
+        group=-1,
+    )
+    app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^📊 Статистика$"),
+            show_statistics,
+        ),
+        group=-1,
+    )
+    app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^🔙 Главное меню$"),
+            back_to_main,
+        ),
+        group=-1,
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            show_admin_order,
+            pattern=r"^admin_order_\d+$",
+        ),
+        group=-1,
+    )
     app.add_handler(
         CallbackQueryHandler(
             change_order_status,
-            pattern=r"^admin_status_(confirmed|processing|shipped|delivered|cancelled)_\d+$",
+            pattern=(
+                r"^admin_status_"
+                r"(confirmed|processing|shipped|delivered|cancelled)_\d+$"
+            ),
         ),
         group=-1,
     )

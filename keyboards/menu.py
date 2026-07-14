@@ -273,18 +273,33 @@ def cart_keyboard(cart_items: list) -> InlineKeyboardMarkup:
 # ORDER DETAILS
 # =========================================================
 
-def order_detail_keyboard(order_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
+def order_detail_keyboard(
+    order_id: int,
+    status: str | None = None,
+) -> InlineKeyboardMarkup:
+    keyboard = [
         [
             InlineKeyboardButton(
                 "📋 Статус заказа",
                 callback_data=f"order_status_{order_id}",
             )
-        ],
-        [
+        ]
+    ]
+
+    # Танҳо заказҳои анҷомнаёфтаро бекор кардан мумкин аст
+    if status not in {"cancelled", "delivered"}:
+        keyboard.append([
             InlineKeyboardButton(
-                "🔙 Мои заказы",
-                callback_data="my_orders",
+                "❌ Отменить заказ",
+                callback_data=f"cancel_order_{order_id}",
             )
-        ],
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            "🔙 Мои заказы",
+            callback_data="my_orders",
+        )
     ])
+
+    return InlineKeyboardMarkup(keyboard)
