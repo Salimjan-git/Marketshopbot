@@ -16,9 +16,9 @@ from database import (
     add_to_cart,
     clear_cart,
     create_order,
-    get_brands_by_category,
+    get_brands,
     get_cart,
-    get_models_by_category_and_brand,
+    get_models_by_brand,
     get_order_details,
     get_or_create_user,
     get_product,
@@ -74,9 +74,6 @@ def get_database_user_id(
 
 def build_product_caption(product: dict) -> str:
     price = float(product["price"])
-    discount = float(product["discount"] or 0)
-    final_price = max(0, price - discount)
-
     condition = "Нав" if product["condition"] == "new" else "Б/у"
 
     return (
@@ -88,14 +85,7 @@ def build_product_caption(product: dict) -> str:
         f"🧠 RAM: {product.get('ram') or '—'}\n"
         f"💾 Хотира: {product.get('storage') or '—'}\n"
         f"🎨 Ранг: {product.get('color') or '—'}\n"
-        f"💰 Нарх: {price:.2f} сомонӣ\n"
-        f"📉 Тахфиф: {discount:.2f} сомонӣ\n"
-        f"💳 Нархи ниҳоӣ: {final_price:.2f} сомонӣ\n"
-        f"📦 Дар анбор: {product['stock']} дона\n"
-        f"📍 Шаҳр: {product.get('city') or '—'}\n"
-        f"🛡 Кафолат: {product.get('warranty') or '—'}\n"
-        f"🔋 Battery health: {product.get('battery_health') or '—'}\n"
-        f"📶 SIM: {product.get('sim_type') or '—'}\n\n"
+        f"💰 Нарх: {price:.2f} сомонӣ\n\n"
         f"📝 Тавсиф:\n"
         f"{product.get('description') or 'Тавсиф мавҷуд нест.'}"
     )
@@ -172,7 +162,7 @@ async def show_categories_callback(query) -> None:
 # =========================================================
 
 async def show_brands_callback(query, category_id: int) -> None:
-    brands = get_brands_by_category(category_id)
+    brands = get_brands()
 
     if not brands:
         await edit_or_send_text(
@@ -205,10 +195,7 @@ async def show_models_callback(
     category_id: int,
     brand_id: int,
 ) -> None:
-    models = get_models_by_category_and_brand(
-        category_id=category_id,
-        brand_id=brand_id,
-    )
+    models = get_models_by_brand(brand_id)
 
     if not models:
         await edit_or_send_text(
@@ -628,157 +615,13 @@ async def handle_callback(
         await show_product_card(query, product_id, 0)
         return
 
-    if data.startswith("add_to_cart_"):
-        try:
-            product_id = int(data.removeprefix("add_to_cart_"))
-        except ValueError:
-            return
 
-        if not user_id:
-            await query.answer("Корбар ёфт нашуд.", show_alert=True)
-            return
 
-        success = add_to_cart(user_id, product_id, 1)
 
-        await query.answer(
-            "✅ Ба корзина илова шуд!"
-            if success
-            else "❌ Дар анбор миқдори кофӣ нест.",
-            show_alert=True,
-        )
-        return
 
-    if data == "show_cart":
-        await show_cart_callback(query, user_id)
-        return
 
-    if data.startswith("cart_item_"):
-        try:
-            product_id = int(data.removeprefix("cart_item_"))
-        except ValueError:
-            return
 
-        cart = get_cart(user_id) if user_id else []
-        item = next(
-            (
-                row
-                for row in cart
-                if row["product_id"] == product_id
-            ),
-            None,
-        )
 
-        if not item:
-            await edit_or_send_text(query, "Товар дар корзина нест.")
-            return
-
-        await edit_or_send_text(
-            query,
-            (
-                f"📦 {item['name']}\n\n"
-                f"Миқдор: {item['quantity']}\n"
-                f"Маблағ: {float(item['total']):.2f} сомонӣ"
-            ),
-            InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        "➕",
-                        callback_data=f"cart_inc_{product_id}",
-                    ),
-                    InlineKeyboardButton(
-                        "➖",
-                        callback_data=f"cart_dec_{product_id}",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        "🗑 Нест кардан",
-                        callback_data=f"cart_remove_{product_id}",
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "🔙 Ба корзина",
-                        callback_data="show_cart",
-                    )
-                ],
-            ]),
-        )
-        return
-
-    if data.startswith("cart_inc_"):
-        product_id = int(data.removeprefix("cart_inc_"))
-        cart = get_cart(user_id) if user_id else []
-        item = next(
-            (row for row in cart if row["product_id"] == product_id),
-            None,
-        )
-
-        if item:
-            update_cart_quantity(
-                user_id,
-                product_id,
-                item["quantity"] + 1,
-            )
-
-        await show_cart_callback(query, user_id)
-        return
-
-    if data.startswith("cart_dec_"):
-        product_id = int(data.removeprefix("cart_dec_"))
-        cart = get_cart(user_id) if user_id else []
-        item = next(
-            (row for row in cart if row["product_id"] == product_id),
-            None,
-        )
-
-        if item:
-            if item["quantity"] > 1:
-                update_cart_quantity(
-                    user_id,
-                    product_id,
-                    item["quantity"] - 1,
-                )
-            else:
-                remove_from_cart(user_id, product_id)
-
-        await show_cart_callback(query, user_id)
-        return
-
-    if data.startswith("cart_remove_"):
-        product_id = int(data.removeprefix("cart_remove_"))
-
-        if user_id:
-            remove_from_cart(user_id, product_id)
-
-        await show_cart_callback(query, user_id)
-        return
-
-    if data == "clear_cart":
-        if user_id:
-            clear_cart(user_id)
-
-        await show_cart_callback(query, user_id)
-        return
-
-    if data == "checkout":
-        cart = get_cart(user_id) if user_id else []
-
-        if not cart:
-            await edit_or_send_text(query, "🛒 Корзина холӣ аст.")
-            return
-
-        context.user_data["awaiting_order_data"] = True
-
-        await edit_or_send_text(
-            query,
-            (
-                "Адрес ва телефонро дар як паём фиристед.\n\n"
-                "Мисол:\n"
-                "Душанбе, Рӯдакӣ 10 | +992900001122"
-            ),
-        )
-        return
 
     if data == "my_orders":
         await show_orders_callback(query, user_id)
@@ -852,7 +695,7 @@ async def handle_callback(
             ),
             reply_markup=order_detail_keyboard(
                 order_id=order_id,
-                status=order["status"],
+                status="cancelled",
             ),
         )
 
@@ -890,68 +733,14 @@ async def handle_callback(
         await edit_or_send_text(
             query,
             "\n".join(lines),
-            order_detail_keyboard(order_id),
+            order_detail_keyboard(
+                order_id=order_id,
+                status=order["status"],
+            ),
         )
         return
     return
 
-
-# =========================================================
-# ORDER INPUT
-# =========================================================
-
-async def handle_order_data(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-) -> None:
-    if not update.message or not update.message.text:
-        return
-
-    if not context.user_data.get("awaiting_order_data"):
-        return
-
-    text = update.message.text.strip()
-
-    if "|" not in text:
-        await update.message.reply_text(
-            "❌ Формат нодуруст аст.\n"
-            "Мисол: Душанбе, Рӯдакӣ 10 | +992900001122"
-        )
-        return
-
-    address, phone = [part.strip() for part in text.split("|", 1)]
-
-    if len(address) < 5 or len(phone) < 7:
-        await update.message.reply_text(
-            "❌ Адрес ё телефон нодуруст аст."
-        )
-        return
-
-    user_id = get_database_user_id(update, context)
-
-    order_id = create_order(
-        user_id=user_id,
-        address=address,
-        phone=phone,
-    )
-
-    context.user_data["awaiting_order_data"] = False
-
-    if not order_id:
-        await update.message.reply_text(
-            "❌ Фармоиш сохта нашуд.",
-            reply_markup=main_menu_keyboard(),
-        )
-        return
-
-    await update.message.reply_text(
-        (
-            f"✅ Фармоиши №{order_id} қабул шуд!\n"
-            f"🏠 {address}\n"
-            f"📞 {phone}"
-        ),
-        reply_markup=main_menu_keyboard(),
-    )
 
 
 # =========================================================
@@ -966,12 +755,6 @@ def register_handlers(app: Application) -> None:
         )
     )
 
-    app.add_handler(
-        MessageHandler(
-            filters.Regex(r"^🛒 Корзина$"),
-            show_cart,
-        )
-    )
 
     app.add_handler(
         MessageHandler(
@@ -983,7 +766,9 @@ def register_handlers(app: Application) -> None:
     app.add_handler(
         CallbackQueryHandler(
             handle_callback,
-            pattern=r"^(?!admin_).+",
+            pattern=(
+                r"^(?!admin_|add_to_cart_|show_cart$|"
+                r"cart_|clear_cart$|checkout$).+"
+            ),
         )
     )
-
