@@ -29,19 +29,19 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
 # =========================================================
 
 def categories_keyboard(categories: list) -> InlineKeyboardMarkup:
-    keyboard = [
-        [
+    keyboard = []
+
+    for category in categories:
+        keyboard.append([
             InlineKeyboardButton(
-                category["name"],
+                text=category["name"],
                 callback_data=f"category_{category['id']}",
             )
-        ]
-        for category in categories
-    ]
+        ])
 
     keyboard.append([
         InlineKeyboardButton(
-            "🔙 Назад",
+            "🔙 Главное меню",
             callback_data="back_to_main",
         )
     ])

@@ -485,7 +485,9 @@ async def handle_callback(
 
     if not query:
         return
-
+    
+    print("CATALOG CALLBACK:", query.data)
+    
     await query.answer()
 
     data = query.data or ""
@@ -752,23 +754,29 @@ def register_handlers(app: Application) -> None:
         MessageHandler(
             filters.Regex(r"^🛍 Каталог$"),
             show_categories,
-        )
+        ),
+        group=0,
     )
-
 
     app.add_handler(
         MessageHandler(
             filters.Regex(r"^📦 Мои заказы$"),
             show_orders,
-        )
+        ),
+        group=0,
     )
 
     app.add_handler(
         CallbackQueryHandler(
             handle_callback,
             pattern=(
-                r"^(?!admin_|add_to_cart_|show_cart$|"
-                r"cart_|clear_cart$|checkout$).+"
+                r"^(category_\d+|brand_\d+|model_\d+|"
+                r"product_\d+|product_image_\d+_\d+|"
+                r"products_page_\d+|back_to_main|"
+                r"back_to_categories|back_to_brands|"
+                r"back_to_models|back_to_products|"
+                r"my_orders|order_status_\d+|cancel_order_\d+)$"
             ),
-        )
+        ),
+        group=0,
     )

@@ -30,6 +30,7 @@ def main():
     cart.register_handlers(app)
     start.register_handlers(app)
     catalog.register_handlers(app)
+    print("🤖 Бот запущен...")
 
     app.run_polling()
 
