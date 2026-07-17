@@ -1,6 +1,6 @@
 import sqlite3
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -12,9 +12,12 @@ from telegram.ext import (
 
 from config import ADMIN_IDS
 from database import (
+    delete_category,
     delete_brand,
     delete_model,
     delete_product,
+    get_categories,
+    get_category,
     get_brand,
     get_brands,
     get_model,
@@ -22,11 +25,15 @@ from database import (
     get_product,
     get_products,
     update_brand,
+    update_category,
     update_model,
     update_product,
 )
 from keyboards.admin import (
     admin_menu_keyboard,
+    categories_manage_keyboard,
+    category_actions_keyboard,
+    confirm_delete_category_keyboard,
     brand_actions_keyboard,
     brands_manage_keyboard,
     confirm_delete_brand_keyboard,
@@ -40,11 +47,12 @@ from keyboards.admin import (
 
 
 (
+    EDIT_CATEGORY_NAME,
     EDIT_BRAND_NAME,
     EDIT_MODEL_NAME,
     EDIT_PRODUCT_TITLE,
     EDIT_PRODUCT_PRICE,
-) = range(4)
+) = range(5)
 
 
 def is_admin(telegram_id: int) -> bool:
@@ -61,6 +69,190 @@ async def deny_access(update: Update) -> None:
         await update.message.reply_text(
             "❌ Шумо ҳуқуқи администратор надоред."
         )
+
+
+
+# =========================================================
+# CATEGORIES
+# =========================================================
+
+async def show_categories(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    user = update.effective_user
+
+    if not user or not is_admin(user.id):
+        await deny_access(update)
+        return
+
+    categories = get_categories()
+
+    if not categories:
+        await update.message.reply_text(
+            "📂 Ҳоло ягон категория нест.",
+            reply_markup=admin_menu_keyboard(),
+        )
+        return
+
+    await update.message.reply_text(
+        "📂 Рӯйхати категорияҳо:",
+        reply_markup=categories_manage_keyboard(categories),
+    )
+
+
+async def show_categories_callback(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    query = update.callback_query
+    await query.answer()
+
+    categories = get_categories()
+
+    await query.edit_message_text(
+        "📂 Рӯйхати категорияҳо:",
+        reply_markup=categories_manage_keyboard(categories),
+    )
+
+
+async def show_category_details(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    query = update.callback_query
+    await query.answer()
+
+    category_id = int(
+        query.data.removeprefix("admin_category_manage_")
+    )
+
+    category = get_category(category_id)
+
+    if not category:
+        await query.edit_message_text("❌ Категория ёфт нашуд.")
+        return
+
+    await query.edit_message_text(
+        (
+            f"📂 Категория\n\n"
+            f"ID: {category['id']}\n"
+            f"Ном: {category['name']}"
+        ),
+        reply_markup=category_actions_keyboard(category_id),
+    )
+
+
+async def edit_category_start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    category_id = int(
+        query.data.removeprefix("admin_category_edit_")
+    )
+
+    category = get_category(category_id)
+
+    if not category:
+        await query.edit_message_text("❌ Категория ёфт нашуд.")
+        return ConversationHandler.END
+
+    context.user_data["edit_category_id"] = category_id
+
+    await query.edit_message_text(
+        f"✏️ Номи ҳозира: {category['name']}\n\n"
+        "Номи навро нависед:"
+    )
+
+    return EDIT_CATEGORY_NAME
+
+
+async def edit_category_name(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    category_id = context.user_data.get("edit_category_id")
+    name = update.message.text.strip()
+
+    if not category_id:
+        return ConversationHandler.END
+
+    if len(name) < 2:
+        await update.message.reply_text("❌ Ном хеле кӯтоҳ аст.")
+        return EDIT_CATEGORY_NAME
+
+    try:
+        success = update_category(
+            category_id=category_id,
+            name=name,
+        )
+    except sqlite3.IntegrityError:
+        await update.message.reply_text(
+            "❌ Категория бо чунин ном аллакай вуҷуд дорад."
+        )
+        return EDIT_CATEGORY_NAME
+
+    context.user_data.pop("edit_category_id", None)
+
+    await update.message.reply_text(
+        "✅ Категория навсозӣ шуд."
+        if success
+        else "❌ Категория навсозӣ нашуд.",
+        reply_markup=admin_menu_keyboard(),
+    )
+
+    return ConversationHandler.END
+
+
+async def delete_category_confirm(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    query = update.callback_query
+    await query.answer()
+
+    category_id = int(
+        query.data.removeprefix("admin_category_delete_")
+    )
+
+    category = get_category(category_id)
+
+    if not category:
+        await query.edit_message_text("❌ Категория ёфт нашуд.")
+        return
+
+    await query.edit_message_text(
+        (
+            f"⚠️ Категорияи «{category['name']}»-ро нест мекунед?\n\n"
+            "Товарҳои вобаста низ нест мешаванд."
+        ),
+        reply_markup=confirm_delete_category_keyboard(category_id),
+    )
+
+
+async def delete_category_execute(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    query = update.callback_query
+    await query.answer()
+
+    category_id = int(
+        query.data.removeprefix(
+            "admin_category_delete_confirm_"
+        )
+    )
+
+    success = delete_category(category_id)
+
+    await query.edit_message_text(
+        "✅ Категория нест карда шуд."
+        if success
+        else "❌ Категория нест карда нашуд."
+    )
 
 
 # =========================================================
@@ -168,9 +360,17 @@ async def edit_brand_name(
         return ConversationHandler.END
 
     try:
+        brand = get_brand(brand_id)
+
+        if not brand:
+            await update.message.reply_text("❌ Бренд ёфт нашуд.")
+            return ConversationHandler.END
+
         update_brand(
             brand_id=brand_id,
+            category_id=brand["category_id"],
             name=name,
+            logo=brand.get("logo"),
         )
     except sqlite3.IntegrityError:
         await update.message.reply_text(
@@ -557,12 +757,9 @@ async def edit_product_price(
         ram=product.get("ram"),
         storage=product.get("storage"),
         color=product.get("color"),
-        discount=float(product.get("discount") or 0),
-        stock=int(product.get("stock") or 1),
-        city=product.get("city"),
+        has_imei=bool(product.get("has_imei")),
         warranty=product.get("warranty"),
-        battery_health=product.get("battery_health"),
-        sim_type=product.get("sim_type"),
+        stock=int(product.get("stock") or 1),
     )
 
     context.user_data.pop("edit_product", None)
@@ -619,6 +816,25 @@ async def delete_product_execute(
 # =========================================================
 
 def register_handlers(app: Application) -> None:
+    edit_category_conversation = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(
+                edit_category_start,
+                pattern=r"^admin_category_edit_\d+$",
+            )
+        ],
+        states={
+            EDIT_CATEGORY_NAME: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    edit_category_name,
+                )
+            ]
+        },
+        fallbacks=[],
+        allow_reentry=True,
+    )
+
     edit_brand_conversation = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(
@@ -682,9 +898,51 @@ def register_handlers(app: Application) -> None:
         allow_reentry=True,
     )
 
+    app.add_handler(edit_category_conversation, group=-2)
     app.add_handler(edit_brand_conversation, group=-2)
     app.add_handler(edit_model_conversation, group=-2)
     app.add_handler(edit_product_conversation, group=-2)
+
+
+    app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^📂 Категорияҳо$"),
+            show_categories,
+        ),
+        group=-2,
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            show_categories_callback,
+            pattern=r"^admin_categories_list$",
+        ),
+        group=-2,
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            show_category_details,
+            pattern=r"^admin_category_manage_\d+$",
+        ),
+        group=-2,
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            delete_category_confirm,
+            pattern=r"^admin_category_delete_\d+$",
+        ),
+        group=-2,
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            delete_category_execute,
+            pattern=r"^admin_category_delete_confirm_\d+$",
+        ),
+        group=-2,
+    )
 
     app.add_handler(
         MessageHandler(

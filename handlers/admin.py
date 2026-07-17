@@ -21,6 +21,7 @@ from database import (
     get_all_orders,
     get_all_users,
     get_brands,
+    get_brands_by_category,
     get_categories,
     get_models_by_brand,
     get_order_details,
@@ -35,6 +36,7 @@ from keyboards.admin import (
     condition_keyboard,
     confirm_product_keyboard,
     finish_images_keyboard,
+    imei_keyboard,
     order_status_keyboard,
     orders_admin_keyboard,
 )
@@ -43,7 +45,9 @@ from keyboards.menu import main_menu_keyboard
 
 (
     ADD_CATEGORY_NAME,
+    ADD_BRAND_CATEGORY,
     ADD_BRAND_NAME,
+    ADD_MODEL_CATEGORY,
     ADD_MODEL_BRAND,
     ADD_MODEL_NAME,
     PRODUCT_CATEGORY,
@@ -55,10 +59,12 @@ from keyboards.menu import main_menu_keyboard
     PRODUCT_RAM,
     PRODUCT_STORAGE,
     PRODUCT_COLOR,
+    PRODUCT_IMEI,
+    PRODUCT_WARRANTY,
     PRODUCT_PRICE,
     PRODUCT_IMAGES,
     PRODUCT_CONFIRM,
-) = range(16)
+) = range(20)
 
 
 def is_admin(telegram_id: int) -> bool:
@@ -167,34 +173,95 @@ async def add_category_name(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 # ===================== BRAND =====================
 
-async def add_brand_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def add_brand_start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     user = update.effective_user
+
     if not user or not is_admin(user.id):
         await deny_access(update)
         return ConversationHandler.END
 
+    categories = get_categories()
+
+    if not categories:
+        await update.message.reply_text(
+            "❌ Аввал категория илова кунед.",
+            reply_markup=admin_menu_keyboard(),
+        )
+        return ConversationHandler.END
+
+    context.user_data["new_brand"] = {}
+
     await update.message.reply_text(
-        "🏷 Номи брендро нависед.\n"
-        "Мисол: Samsung\n\n"
-        "Бекор кардан: /cancel"
+        "📂 Категорияи брендро интихоб кунед:",
+        reply_markup=admin_categories_keyboard(
+            categories,
+            prefix="admin_brand_category",
+        ),
+    )
+    return ADD_BRAND_CATEGORY
+
+
+async def add_brand_category_selected(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    try:
+        category_id = int(
+            query.data.removeprefix("admin_brand_category_")
+        )
+    except ValueError:
+        return ConversationHandler.END
+
+    context.user_data["new_brand"] = {
+        "category_id": category_id,
+    }
+
+    await query.edit_message_text(
+        "🏷 Номи брендро нависед.\n\n"
+        "Мисол: JBL, Apple, Baseus ё Anker"
     )
     return ADD_BRAND_NAME
 
 
-async def add_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def add_brand_name(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     name = update.message.text.strip()
+    brand_data = context.user_data.get("new_brand", {})
+
     if len(name) < 2:
         await update.message.reply_text("❌ Ном хеле кӯтоҳ аст.")
         return ADD_BRAND_NAME
 
-    try:
-        brand_id = add_brand(name=name)
-    except sqlite3.IntegrityError:
+    category_id = brand_data.get("category_id")
+
+    if not category_id:
         await update.message.reply_text(
-            "❌ Ин бренд аллакай вуҷуд дорад.",
+            "❌ Категория интихоб нашудааст.",
             reply_markup=admin_menu_keyboard(),
         )
         return ConversationHandler.END
+
+    try:
+        brand_id = add_brand(
+            category_id=category_id,
+            name=name,
+        )
+    except sqlite3.IntegrityError:
+        await update.message.reply_text(
+            "❌ Ин бренд дар ҳамин категория аллакай вуҷуд дорад.",
+            reply_markup=admin_menu_keyboard(),
+        )
+        return ConversationHandler.END
+
+    context.user_data.pop("new_brand", None)
 
     await update.message.reply_text(
         f"✅ Бренд илова шуд.\nID: {brand_id}\nНом: {name}",
@@ -205,16 +272,21 @@ async def add_brand_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 # ===================== MODEL =====================
 
-async def add_model_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def add_model_start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     user = update.effective_user
+
     if not user or not is_admin(user.id):
         await deny_access(update)
         return ConversationHandler.END
 
-    brands = get_brands()
-    if not brands:
+    categories = get_categories()
+
+    if not categories:
         await update.message.reply_text(
-            "❌ Аввал бренд илова кунед.",
+            "❌ Аввал категория илова кунед.",
             reply_markup=admin_menu_keyboard(),
         )
         return ConversationHandler.END
@@ -222,6 +294,43 @@ async def add_model_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data["new_model"] = {}
 
     await update.message.reply_text(
+        "📂 Категорияи моделро интихоб кунед:",
+        reply_markup=admin_categories_keyboard(
+            categories,
+            prefix="admin_model_category",
+        ),
+    )
+    return ADD_MODEL_CATEGORY
+
+
+async def add_model_category_selected(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    try:
+        category_id = int(
+            query.data.removeprefix("admin_model_category_")
+        )
+    except ValueError:
+        return ConversationHandler.END
+
+    brands = get_brands_by_category(category_id)
+
+    if not brands:
+        await query.edit_message_text(
+            "❌ Барои ин категория ҳоло бренд нест.\n"
+            "Аввал бренд илова кунед."
+        )
+        return ConversationHandler.END
+
+    context.user_data["new_model"] = {
+        "category_id": category_id,
+    }
+
+    await query.edit_message_text(
         "🏷 Брендро интихоб кунед:",
         reply_markup=admin_brands_keyboard(
             brands,
@@ -239,39 +348,58 @@ async def add_model_brand_selected(
     await query.answer()
 
     try:
-        brand_id = int(query.data.removeprefix("admin_model_brand_"))
+        brand_id = int(
+            query.data.removeprefix("admin_model_brand_")
+        )
     except ValueError:
         return ConversationHandler.END
 
-    context.user_data["new_model"] = {"brand_id": brand_id}
+    model_data = context.user_data.setdefault("new_model", {})
+    model_data["brand_id"] = brand_id
+
     await query.edit_message_text(
         "📱 Номи моделро нависед.\n"
-        "Мисол: Galaxy S24 Ultra"
+        "Мисол: Galaxy S24 Ultra, Tune 520BT ё Watch 6"
     )
     return ADD_MODEL_NAME
 
 
-async def add_model_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def add_model_name(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     name = update.message.text.strip()
     model_data = context.user_data.get("new_model", {})
 
     if len(name) < 2:
-        await update.message.reply_text("❌ Номи модел хеле кӯтоҳ аст.")
+        await update.message.reply_text(
+            "❌ Номи модел хеле кӯтоҳ аст."
+        )
         return ADD_MODEL_NAME
+
+    brand_id = model_data.get("brand_id")
+
+    if not brand_id:
+        await update.message.reply_text(
+            "❌ Бренд интихоб нашудааст.",
+            reply_markup=admin_menu_keyboard(),
+        )
+        return ConversationHandler.END
 
     try:
         model_id = add_model(
-            brand_id=model_data["brand_id"],
+            brand_id=brand_id,
             name=name,
         )
-    except (KeyError, sqlite3.IntegrityError):
+    except sqlite3.IntegrityError:
         await update.message.reply_text(
-            "❌ Модел илова нашуд ё аллакай вуҷуд дорад.",
+            "❌ Ин модел барои ҳамин бренд аллакай вуҷуд дорад.",
             reply_markup=admin_menu_keyboard(),
         )
         return ConversationHandler.END
 
     context.user_data.pop("new_model", None)
+
     await update.message.reply_text(
         f"✅ Модел илова шуд.\nID: {model_id}\nНом: {name}",
         reply_markup=admin_menu_keyboard(),
@@ -317,9 +445,12 @@ async def product_category_selected(
     category_id = int(query.data.removeprefix("admin_category_"))
     new_product(context)["category_id"] = category_id
 
-    brands = get_brands()
+    brands = get_brands_by_category(category_id)
     if not brands:
-        await query.edit_message_text("❌ Аввал бренд илова кунед.")
+        await query.edit_message_text(
+            "❌ Барои ин категория ҳоло бренд нест.\n"
+            "Аввал бренд илова кунед."
+        )
         return ConversationHandler.END
 
     await query.edit_message_text(
@@ -449,13 +580,57 @@ async def product_storage_input(
     return PRODUCT_COLOR
 
 
-async def product_color_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def product_color_input(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
     value = update.message.text.strip()
+
     if not value:
         await update.message.reply_text("❌ Рангро нависед.")
         return PRODUCT_COLOR
 
     new_product(context)["color"] = value
+
+    await update.message.reply_text(
+        "🔐 IMEI дорад ё не?",
+        reply_markup=imei_keyboard(),
+    )
+    return PRODUCT_IMEI
+
+
+async def product_imei_selected(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    value = query.data.removeprefix("admin_imei_")
+
+    if value not in {"yes", "no"}:
+        return PRODUCT_IMEI
+
+    new_product(context)["has_imei"] = value == "yes"
+
+    await query.edit_message_text(
+        "🛡 Кафолатро нависед.\n\n"
+        "Мисол: 1 моҳ, 6 моҳ, 12 моҳ\n"
+        "Агар кафолат надошта бошад: -"
+    )
+    return PRODUCT_WARRANTY
+
+
+async def product_warranty_input(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    value = update.message.text.strip()
+
+    new_product(context)["warranty"] = (
+        None if value == "-" else value
+    )
+
     await update.message.reply_text(
         "💰 Нархро бо сомонӣ нависед.\n"
         "Мисол: 9500"
@@ -561,13 +736,10 @@ async def product_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             ram=product.get("ram"),
             storage=product["storage"],
             color=product["color"],
+            has_imei=product.get("has_imei", False),
+            warranty=product.get("warranty"),
             price=product["price"],
-            discount=0,
             stock=1,
-            city=None,
-            warranty=None,
-            battery_health=None,
-            sim_type=None,
         )
 
         for position, file_id in enumerate(product["images"], start=1):
@@ -711,14 +883,26 @@ def register_handlers(app: Application) -> None:
             )
         ],
         states={
+            ADD_BRAND_CATEGORY: [
+                CallbackQueryHandler(
+                    add_brand_category_selected,
+                    pattern=r"^admin_brand_category_\d+$",
+                )
+            ],
             ADD_BRAND_NAME: [
                 MessageHandler(
                     filters.TEXT & ~filters.COMMAND,
                     add_brand_name,
                 )
-            ]
+            ],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[
+            CommandHandler("cancel", cancel),
+            CallbackQueryHandler(
+                cancel,
+                pattern=r"^admin_cancel$",
+            ),
+        ],
         allow_reentry=True,
     )
 
@@ -730,6 +914,12 @@ def register_handlers(app: Application) -> None:
             )
         ],
         states={
+            ADD_MODEL_CATEGORY: [
+                CallbackQueryHandler(
+                    add_model_category_selected,
+                    pattern=r"^admin_model_category_\d+$",
+                )
+            ],
             ADD_MODEL_BRAND: [
                 CallbackQueryHandler(
                     add_model_brand_selected,
@@ -810,6 +1000,18 @@ def register_handlers(app: Application) -> None:
                 MessageHandler(
                     filters.TEXT & ~filters.COMMAND,
                     product_color_input,
+                )
+            ],
+            PRODUCT_IMEI: [
+                CallbackQueryHandler(
+                    product_imei_selected,
+                    pattern=r"^admin_imei_(yes|no)$",
+                )
+            ],
+            PRODUCT_WARRANTY: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    product_warranty_input,
                 )
             ],
             PRODUCT_PRICE: [

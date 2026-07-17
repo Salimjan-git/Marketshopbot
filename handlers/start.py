@@ -1,7 +1,8 @@
 from telegram import Update
 from telegram.ext import (
-    ContextTypes,
+    Application,
     CommandHandler,
+    ContextTypes,
 )
 
 from database import get_or_create_user
@@ -11,32 +12,30 @@ from keyboards.menu import main_menu_keyboard
 async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-):
+) -> None:
     user = update.effective_user
 
+    if not user or not update.message:
+        return
+
     db_user = get_or_create_user(
-    telegram_id=user.id,
-    full_name=user.full_name,
-    username=user.username,
-)
+        telegram_id=user.id,
+        full_name=user.full_name,
+        username=user.username,
+    )
 
-    context.user_data["user_id"] = db_user["id"]
-    text = f"""
-👋 Салом, {user.first_name}!
+    context.user_data["user_id"] = int(db_user["id"])
 
-Ба Marketplace хуш омадед.
-
-Дар ин ҷо метавонед:
-
-📱 Смартфон
-🎧 Наушник
-⌚ Smart Watch
-📱 Чехол
-🔋 Power Bank
-🔌 Аксессуарҳо
-
-харидорӣ намоед.
-"""
+    text = (
+        f"👋 Салом, {user.first_name}!\n\n"
+        "Ба Marketplace хуш омадед.\n\n"
+        "📱 Смартфон\n"
+        "🎧 Наушник\n"
+        "⌚ Smart Watch\n"
+        "📱 Чехол\n"
+        "🔋 Power Bank\n"
+        "🔌 Аксессуарҳо"
+    )
 
     await update.message.reply_text(
         text=text,
@@ -44,7 +43,7 @@ async def start(
     )
 
 
-def register_handlers(app):
+def register_handlers(app: Application) -> None:
     app.add_handler(
         CommandHandler(
             "start",

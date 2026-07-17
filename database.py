@@ -61,9 +61,16 @@ def create_tables() -> None:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS brands (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
+                category_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
                 logo TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                UNIQUE(category_id, name),
+
+                FOREIGN KEY(category_id)
+                    REFERENCES categories(id)
+                    ON DELETE CASCADE
             )
         """)
 
@@ -99,6 +106,8 @@ def create_tables() -> None:
                 ram TEXT,
                 storage TEXT,
                 color TEXT,
+                has_imei INTEGER NOT NULL DEFAULT 0
+                    CHECK(has_imei IN (0, 1)),
 
                 price REAL NOT NULL CHECK(price >= 0),
                 discount REAL DEFAULT 0 CHECK(discount >= 0),
@@ -127,6 +136,20 @@ def create_tables() -> None:
                     ON DELETE CASCADE
             )
         """)
+
+        # Мигратсияи сабук барои базаи мавҷуда:
+        # агар сутуни has_imei ҳоло набошад, онро илова мекунем.
+        cursor.execute("PRAGMA table_info(products)")
+        product_columns = {
+            row["name"]
+            for row in cursor.fetchall()
+        }
+
+        if "has_imei" not in product_columns:
+            cursor.execute(
+                "ALTER TABLE products "
+                "ADD COLUMN has_imei INTEGER NOT NULL DEFAULT 0"
+            )
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS product_images (
@@ -194,6 +217,11 @@ def create_tables() -> None:
                     REFERENCES products(id)
                     ON DELETE SET NULL
             )
+        """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_brands_category
+            ON brands(category_id)
         """)
 
         cursor.execute("""
@@ -444,13 +472,25 @@ def delete_category(category_id: int) -> bool:
 # BRANDS
 # =========================================================
 
-def add_brand(name: str, logo: str | None = None) -> int:
+def add_brand(
+    category_id: int,
+    name: str,
+    logo: str | None = None,
+) -> int:
+    name = name.strip()
+
+    if len(name) < 2:
+        raise ValueError("Номи бренд хеле кӯтоҳ аст")
+
     conn = get_connection()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO brands (name, logo) VALUES (?, ?)",
-            (name.strip(), logo),
+            """
+            INSERT INTO brands (category_id, name, logo)
+            VALUES (?, ?, ?)
+            """,
+            (category_id, name, logo),
         )
         conn.commit()
         return cursor.lastrowid
@@ -462,18 +502,18 @@ def get_brands() -> list[dict[str, Any]]:
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM brands ORDER BY name")
+        cursor.execute(
+            """
+            SELECT
+                b.*,
+                c.name AS category_name
+            FROM brands AS b
+            INNER JOIN categories AS c
+                ON c.id = b.category_id
+            ORDER BY c.name, b.name
+            """
+        )
         return rows_to_dicts(cursor.fetchall())
-    finally:
-        conn.close()
-
-
-def get_brand(brand_id: int) -> dict[str, Any] | None:
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM brands WHERE id = ?", (brand_id,))
-        return row_to_dict(cursor.fetchone())
     finally:
         conn.close()
 
@@ -486,16 +526,13 @@ def get_brands_by_category(
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT DISTINCT
-                b.id,
-                b.name,
-                b.logo,
-                b.created_at
+            SELECT
+                b.*,
+                c.name AS category_name
             FROM brands AS b
-            INNER JOIN products AS p
-                ON p.brand_id = b.id
-            WHERE p.category_id = ?
-              AND p.is_active = 1
+            INNER JOIN categories AS c
+                ON c.id = b.category_id
+            WHERE b.category_id = ?
             ORDER BY b.name
             """,
             (category_id,),
@@ -505,8 +542,30 @@ def get_brands_by_category(
         conn.close()
 
 
+def get_brand(brand_id: int) -> dict[str, Any] | None:
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                b.*,
+                c.name AS category_name
+            FROM brands AS b
+            INNER JOIN categories AS c
+                ON c.id = b.category_id
+            WHERE b.id = ?
+            """,
+            (brand_id,),
+        )
+        return row_to_dict(cursor.fetchone())
+    finally:
+        conn.close()
+
+
 def update_brand(
     brand_id: int,
+    category_id: int,
     name: str,
     logo: str | None = None,
 ) -> bool:
@@ -516,10 +575,10 @@ def update_brand(
         cursor.execute(
             """
             UPDATE brands
-            SET name = ?, logo = ?
+            SET category_id = ?, name = ?, logo = ?
             WHERE id = ?
             """,
-            (name.strip(), logo, brand_id),
+            (category_id, name.strip(), logo, brand_id),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -679,30 +738,27 @@ def add_product(
     ram: str | None = None,
     storage: str | None = None,
     color: str | None = None,
-    discount: float = 0,
-    stock: int = 0,
-    city: str | None = None,
+    has_imei: bool = False,
     warranty: str | None = None,
-    battery_health: str | None = None,
-    sim_type: str | None = None,
+    stock: int = 1,
     image: str | None = None,
     name: str | None = None,
+
+    # Барои мутобиқат бо коди кӯҳна қабул мешаванд,
+    # аммо дигар истифода намешаванд.
+    discount: float = 0,
+    city: str | None = None,
+    battery_health: str | None = None,
+    sim_type: str | None = None,
 ) -> int:
-    """
-    image ва name барои мутобиқат бо коди кӯҳна қабул мешаванд.
-    Агар image дода шавад, ҳамчун сурати якум нигоҳ дошта мешавад.
-    """
     if not title and name:
         title = name
 
-    if not title:
+    if not title or not title.strip():
         raise ValueError("Номи маҳсулот холӣ аст")
 
-    if price < 0:
-        raise ValueError("Нарх манфӣ шуда наметавонад")
-
-    if discount < 0 or discount > price:
-        raise ValueError("Тахфиф нодуруст аст")
+    if price <= 0:
+        raise ValueError("Нарх бояд аз 0 зиёд бошад")
 
     if stock < 0:
         raise ValueError("Миқдор манфӣ шуда наметавонад")
@@ -717,6 +773,33 @@ def add_product(
 
         cursor.execute(
             """
+            SELECT
+                b.category_id AS brand_category_id,
+                m.brand_id AS model_brand_id
+            FROM brands AS b
+            INNER JOIN models AS m
+                ON m.id = ?
+            WHERE b.id = ?
+            """,
+            (model_id, brand_id),
+        )
+        relation = cursor.fetchone()
+
+        if not relation:
+            raise ValueError("Бренд ё модел ёфт нашуд")
+
+        if int(relation["brand_category_id"]) != int(category_id):
+            raise ValueError(
+                "Бренд ба категорияи интихобшуда тааллуқ надорад"
+            )
+
+        if int(relation["model_brand_id"]) != int(brand_id):
+            raise ValueError(
+                "Модел ба бренди интихобшуда тааллуқ надорад"
+            )
+
+        cursor.execute(
+            """
             INSERT INTO products (
                 category_id,
                 brand_id,
@@ -727,6 +810,7 @@ def add_product(
                 ram,
                 storage,
                 color,
+                has_imei,
                 price,
                 discount,
                 stock,
@@ -735,7 +819,7 @@ def add_product(
                 battery_health,
                 sim_type
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?, NULL, NULL)
             """,
             (
                 category_id,
@@ -747,13 +831,10 @@ def add_product(
                 ram,
                 storage,
                 color,
-                price,
-                discount,
-                stock,
-                city,
+                1 if has_imei else 0,
+                float(price),
+                int(stock),
                 warranty,
-                battery_health,
-                sim_type,
             ),
         )
 
@@ -773,7 +854,7 @@ def add_product(
             )
 
         conn.commit()
-        return product_id
+        return int(product_id)
 
     finally:
         conn.close()
@@ -996,16 +1077,31 @@ def update_product(
     ram: str | None = None,
     storage: str | None = None,
     color: str | None = None,
-    discount: float = 0,
-    stock: int = 0,
-    city: str | None = None,
+    has_imei: bool = False,
     warranty: str | None = None,
+    stock: int = 1,
+
+    # Мутобиқат бо коди кӯҳна.
+    discount: float = 0,
+    city: str | None = None,
     battery_health: str | None = None,
     sim_type: str | None = None,
+    image: str | None = None,
 ) -> bool:
+    if not title or not title.strip():
+        return False
+
+    if price <= 0 or stock < 0:
+        return False
+
+    if condition not in {"new", "used"}:
+        return False
+
     conn = get_connection()
+
     try:
         cursor = conn.cursor()
+
         cursor.execute(
             """
             UPDATE products
@@ -1018,13 +1114,14 @@ def update_product(
                 ram = ?,
                 storage = ?,
                 color = ?,
-                price = ?,
-                discount = ?,
-                stock = ?,
-                city = ?,
+                has_imei = ?,
                 warranty = ?,
-                battery_health = ?,
-                sim_type = ?,
+                price = ?,
+                discount = 0,
+                stock = ?,
+                city = NULL,
+                battery_health = NULL,
+                sim_type = NULL,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -1038,18 +1135,41 @@ def update_product(
                 ram,
                 storage,
                 color,
-                price,
-                discount,
-                stock,
-                city,
+                1 if has_imei else 0,
                 warranty,
-                battery_health,
-                sim_type,
+                float(price),
+                int(stock),
                 product_id,
             ),
         )
+
+        if image:
+            cursor.execute(
+                """
+                INSERT INTO product_images (
+                    product_id,
+                    telegram_file_id,
+                    position
+                )
+                VALUES (
+                    ?,
+                    ?,
+                    COALESCE(
+                        (
+                            SELECT MAX(position) + 1
+                            FROM product_images
+                            WHERE product_id = ?
+                        ),
+                        1
+                    )
+                )
+                """,
+                (product_id, image, product_id),
+            )
+
         conn.commit()
         return cursor.rowcount > 0
+
     finally:
         conn.close()
 
@@ -1250,10 +1370,7 @@ def get_cart(user_id: int) -> list[dict[str, Any]]:
                     LIMIT 1
                 ) AS image,
 
-                CASE
-                    WHEN p.price - p.discount < 0 THEN 0
-                    ELSE p.price - p.discount
-                END AS final_price,
+                p.price AS final_price,
 
                 CASE
                     WHEN p.price - p.discount < 0 THEN 0
@@ -1377,8 +1494,8 @@ def get_cart_total(user_id: int) -> float:
 
 def create_order(
     user_id: int,
-    address: str,
-    phone: str,
+    address: str = "",
+    phone: str = "",
 ) -> int | None:
     conn = get_connection()
 
@@ -1394,10 +1511,7 @@ def create_order(
                 p.price,
                 p.discount,
                 p.stock,
-                CASE
-                    WHEN p.price - p.discount < 0 THEN 0
-                    ELSE p.price - p.discount
-                END AS final_price
+                p.price AS final_price
             FROM cart AS c
             INNER JOIN products AS p
                 ON p.id = c.product_id

@@ -1,14 +1,10 @@
 from telegram import (
-    ReplyKeyboardMarkup,
-    KeyboardButton,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
 )
 
-
-# =========================================================
-# MAIN MENU
-# =========================================================
 
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
@@ -21,37 +17,28 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton("ℹ️ О нас")],
         ],
         resize_keyboard=True,
+        is_persistent=True,
     )
 
 
-# =========================================================
-# CATEGORIES
-# =========================================================
-
 def categories_keyboard(categories: list) -> InlineKeyboardMarkup:
-    keyboard = []
-
-    for category in categories:
-        keyboard.append([
+    keyboard = [
+        [
             InlineKeyboardButton(
-                text=category["name"],
+                category["name"],
                 callback_data=f"category_{category['id']}",
             )
-        ])
-
+        ]
+        for category in categories
+    ]
     keyboard.append([
         InlineKeyboardButton(
             "🔙 Главное меню",
             callback_data="back_to_main",
         )
     ])
-
     return InlineKeyboardMarkup(keyboard)
 
-
-# =========================================================
-# BRANDS
-# =========================================================
 
 def brands_keyboard(brands: list) -> InlineKeyboardMarkup:
     keyboard = [
@@ -63,20 +50,14 @@ def brands_keyboard(brands: list) -> InlineKeyboardMarkup:
         ]
         for brand in brands
     ]
-
     keyboard.append([
         InlineKeyboardButton(
             "🔙 Ба категорияҳо",
             callback_data="back_to_categories",
         )
     ])
-
     return InlineKeyboardMarkup(keyboard)
 
-
-# =========================================================
-# MODELS
-# =========================================================
 
 def models_keyboard(models: list) -> InlineKeyboardMarkup:
     keyboard = [
@@ -88,20 +69,14 @@ def models_keyboard(models: list) -> InlineKeyboardMarkup:
         ]
         for model in models
     ]
-
     keyboard.append([
         InlineKeyboardButton(
             "🔙 Ба брендҳо",
             callback_data="back_to_brands",
         )
     ])
-
     return InlineKeyboardMarkup(keyboard)
 
-
-# =========================================================
-# PRODUCTS / ADS
-# =========================================================
 
 def products_keyboard(
     products: list,
@@ -109,28 +84,19 @@ def products_keyboard(
     items_per_page: int = 5,
 ) -> InlineKeyboardMarkup:
     keyboard = []
-
     start = page * items_per_page
     end = min(start + items_per_page, len(products))
 
     for product in products[start:end]:
-        final_price = max(
-            0,
-            float(product["price"]) - float(product["discount"] or 0),
-        )
-
         storage = product.get("storage") or "—"
         color = product.get("color") or "—"
 
-        text = (
-            f"{product['title']} | "
-            f"{storage} | {color} | "
-            f"{final_price:.2f} сомонӣ"
-        )
-
         keyboard.append([
             InlineKeyboardButton(
-                text=text,
+                (
+                    f"{product['title']} | {storage} | "
+                    f"{color} | {float(product['price']):.2f} сомонӣ"
+                ),
                 callback_data=f"product_{product['id']}",
             )
         ])
@@ -162,13 +128,8 @@ def products_keyboard(
             callback_data="back_to_models",
         )
     ])
-
     return InlineKeyboardMarkup(keyboard)
 
-
-# =========================================================
-# PRODUCT DETAILS
-# =========================================================
 
 def product_detail_keyboard(
     product_id: int,
@@ -209,20 +170,14 @@ def product_detail_keyboard(
             callback_data=f"add_to_cart_{product_id}",
         )
     ])
-
     keyboard.append([
         InlineKeyboardButton(
             "🔙 Ба эълонҳо",
             callback_data="back_to_products",
         )
     ])
-
     return InlineKeyboardMarkup(keyboard)
 
-
-# =========================================================
-# CART
-# =========================================================
 
 def cart_keyboard(cart_items: list) -> InlineKeyboardMarkup:
     keyboard = []
@@ -231,7 +186,7 @@ def cart_keyboard(cart_items: list) -> InlineKeyboardMarkup:
         keyboard.append([
             InlineKeyboardButton(
                 (
-                    f"{item['name']} x{item['quantity']} = "
+                    f"{item['name']} × {item['quantity']} = "
                     f"{float(item['total']):.2f} сомонӣ"
                 ),
                 callback_data=f"cart_item_{item['product_id']}",
@@ -265,29 +220,16 @@ def cart_keyboard(cart_items: list) -> InlineKeyboardMarkup:
             callback_data="back_to_main",
         )
     ])
-
     return InlineKeyboardMarkup(keyboard)
 
-
-# =========================================================
-# ORDER DETAILS
-# =========================================================
 
 def order_detail_keyboard(
     order_id: int,
     status: str | None = None,
 ) -> InlineKeyboardMarkup:
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                "📋 Статус заказа",
-                callback_data=f"order_status_{order_id}",
-            )
-        ]
-    ]
+    keyboard = []
 
-    # Танҳо заказҳои анҷомнаёфтаро бекор кардан мумкин аст
-    if status not in {"cancelled", "delivered"}:
+    if status not in {"cancelled", "shipped", "delivered"}:
         keyboard.append([
             InlineKeyboardButton(
                 "❌ Отменить заказ",
@@ -301,5 +243,4 @@ def order_detail_keyboard(
             callback_data="my_orders",
         )
     ])
-
     return InlineKeyboardMarkup(keyboard)

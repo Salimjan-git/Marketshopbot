@@ -9,8 +9,10 @@ from handlers import (
     admin_manage,
     cart,
     catalog,
+    orders,
     start,
 )
+
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -18,20 +20,19 @@ logging.basicConfig(
 )
 
 
-
-
-def main():
+def main() -> None:
     create_tables()
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    admin.register_handlers(app)
     admin_manage.register_handlers(app)
+    admin.register_handlers(app)
     cart.register_handlers(app)
+    orders.register_handlers(app)
     start.register_handlers(app)
     catalog.register_handlers(app)
-    print("🤖 Бот запущен...")
 
+    print("🤖 Бот запущен...")
     app.run_polling()
 
 
