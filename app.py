@@ -4,14 +4,8 @@ from telegram.ext import ApplicationBuilder
 
 from config import BOT_TOKEN
 from database import create_tables
-from handlers import (
-    admin,
-    admin_manage,
-    cart,
-    catalog,
-    orders,
-    start,
-)
+from handlers import admin, admin_manage, catalog, start
+from handlers.cart import register_handlers as register_cart_handlers
 
 
 logging.basicConfig(
@@ -27,10 +21,9 @@ def main() -> None:
 
     admin_manage.register_handlers(app)
     admin.register_handlers(app)
-    cart.register_handlers(app)
-    orders.register_handlers(app)
     start.register_handlers(app)
     catalog.register_handlers(app)
+    register_cart_handlers(app)
 
     print("🤖 Бот запущен...")
     app.run_polling()

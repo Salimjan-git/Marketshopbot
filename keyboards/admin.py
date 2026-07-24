@@ -24,6 +24,10 @@ def admin_menu_keyboard() -> ReplyKeyboardMarkup:
                 KeyboardButton("🛍 Товарҳо"),
             ],
             [
+                KeyboardButton("💳 Танзимоти пардохт"),
+                KeyboardButton("🧾 Санҷиши чекҳо"),
+            ],
+            [
                 KeyboardButton("📦 Все заказы"),
                 KeyboardButton("📊 Статистика"),
             ],
@@ -441,3 +445,92 @@ def confirm_delete_product_keyboard(
             )
         ],
     ])
+
+
+# =========================================================
+# PAYMENT RECEIPTS
+# =========================================================
+
+def payment_receipts_keyboard(orders: list) -> InlineKeyboardMarkup:
+    keyboard = []
+
+    for order in orders[:30]:
+        full_name = order.get("full_name") or "Корбар"
+        keyboard.append([
+            InlineKeyboardButton(
+                f"🧾 #{order['id']} — {full_name}",
+                callback_data=f"admin_receipt_{order['id']}",
+            )
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            "🔄 Навсозӣ",
+            callback_data="admin_receipts_refresh",
+        )
+    ])
+    return InlineKeyboardMarkup(keyboard)
+
+
+def payment_receipt_actions_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(
+                "✅ Тасдиқи пардохт",
+                callback_data=f"admin_payment_approve_{order_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "❌ Рад кардани пардохт",
+                callback_data=f"admin_payment_reject_{order_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "🔙 Ба рӯйхати чекҳо",
+                callback_data="admin_receipts_refresh",
+            )
+        ],
+    ])
+    
+
+def admin_order_detail_keyboard(order: dict):
+    status = order["status"]
+
+    keyboard = []
+
+    if status == "pending":
+        keyboard.append([
+            InlineKeyboardButton(
+                "✅ Қабул кардан",
+                callback_data=f"admin_order_confirm_{order['id']}"
+            ),
+            InlineKeyboardButton(
+                "❌ Рад кардан",
+                callback_data=f"admin_order_cancel_{order['id']}"
+            ),
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            "🚚 Фиристода шуд",
+            callback_data=f"admin_order_shipping_{order['id']}"
+        )
+    ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            "✅ Ба анҷом расид",
+            callback_data=f"admin_order_completed_{order['id']}"
+        )
+    ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            "🔙 Бозгашт",
+            callback_data="admin_orders"
+        )
+    ])
+
+    return InlineKeyboardMarkup(keyboard)
